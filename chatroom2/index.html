@@ -1,0 +1,179 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Stict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang = "zh-CN">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+
+    <style>
+        .j-message {
+            margin-bottom: 50px;
+            white-space: nowrap;  /*强制不换行*/
+        }
+        .j-footer {
+            width: 100%;
+            height: 50px;
+            position: fixed;
+            bottom: 0;
+            background-color:white;
+            border-top:1px solid black;
+        }
+        table {
+            height: 100%;
+        }
+        .j-footer table {
+            height: 100%;
+            border-collapse: separate;
+            border-spacing: 7px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="j-message">
+    <table id="tblData"></table>
+</div>
+<div class="j-footer">
+    <table>
+        <tr>
+            <td width="100%">
+                <input id="message-input" class="form-control" type="text">
+            </td>
+            <td width="20%">
+                <button id="message-button" class="btn btn-default" type="submit">发送</button>
+            </td>
+            <td width="20%">
+                <input type="button" value="清除" onclick="clearData();"/>
+            </td>
+            <td width="20%">
+                <input type="button" value="导出" onclick="exportData();"/>
+            </td>
+        </tr>
+    </table>
+</div>
+
+
+<script src="http://cdn.socket.io/socket.io-1.4.0.js" type="text/javascript"></script>
+<script src="http://code.jquery.com/jquery-3.4.1.min.js" type="text/javascript"></script>
+<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<script src="http://socket-io-of-keven.herokuapp.com/FileSaver.js" type="text/javascript" charset="utf-8"></script>
+<script src="http://socket-io-of-keven.herokuapp.com/indexedDB.js" type="text/javascript" charset="utf-8"></script>
+
+<script>
+    var serverURL = 'ws://socket-io-of-keven.herokuapp.com/';
+    var name = 'user' + Math.ceil(Math.random() * 100);
+    var room = '100';
+    var socket = null;
+
+    //Convert special characters to HTML in Javascript
+    //https://stackoverflow.com/questions/1787322/htmlspecialchars-equivalent-in-javascript/4835406#4835406
+    function escapeHtml(text) {
+        var map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    function undefinedCheck(value) {
+        return (typeof(value) == "undefined" ? '' : value)
+    }
+
+    function writeMessage(type, name, message, message1, message2) {
+        console.log('writeMessage:' + type);
+        var printName = '';
+        if (type === 'me') {
+            printName = name + ' : ';
+        } else if (type === 'other') {
+            printName = name + ' : ';
+        }
+        msg = message;
+        msg1 = message1;
+        msg2 = message2;
+
+        var html = "<tr><td>{NAME}{MESSAGE}{MESSAGE1}</td><td>{MESSAGE2}<td></tr>";
+        html = html.replace('{NAME}', printName);
+        html = html.replace('{MESSAGE}', escapeHtml(undefinedCheck(message)));
+        html = html.replace('{MESSAGE1}', '&emsp;' + escapeHtml(undefinedCheck(message1)));
+        html = html.replace('{MESSAGE2}', '&emsp;' + escapeHtml(undefinedCheck(message2)));
+
+        //$(html).appendTo('.j-message');
+        $("#tblData").append(html);
+        $('body').stop();
+        $('body').animate({scrollTop:$('body').height()}, 500);
+
+        //插入数据
+        addData(name, msg, msg1, msg2);
+    }
+
+    function sender(text) {
+        console.log('sender');
+        socket.emit('user', {
+            name : name,
+            message : text
+        });
+        writeMessage('me', name, text, '', '');
+    }
+
+    $(document).ready(function() {
+        socket = io.connect(serverURL);
+
+        socket.on('client-connected', function(data) {
+            console.log('client-connected');
+            if(data.type === 'connected') {
+                socket.emit('client-join', {
+                    type : 'join',
+                    name : name,
+                    room : room
+                });
+            }
+        });
+
+        socket.on('system', function(data) {
+            console.log('system');
+            writeMessage('system', 'system', '', '', data.message);
+        });
+
+        socket.on('other', function(data) {
+            console.log('other');
+            writeMessage('other', data.name, data.message, data.message1, data.message2);
+        });
+
+        socket.on('time', function(data) {
+            //console.log('time=' + data);
+        });
+
+        $('#message-button').click(function() {
+            var $input = $('#message-input');
+            var msg = $input.val();
+            sender(msg);
+            $input.val('');
+            $input.focus();
+        });
+
+        $('#message-input').on('keypress', function(e) {
+            if(e.keyCode === 13) {
+                var $input = $('#message-input');
+                var msg = $input.val();
+                sender(msg);
+                $input.val('');
+                $input.focus();
+            }
+        });
+    });
+
+    $(function() { //页面加载完成后绑定页面按钮的点击事件
+        openDB(myDB.name, myDB.version);
+    });
+</script>
+
+</body>
+</html>
